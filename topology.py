@@ -5,6 +5,16 @@ from py2neo import Graph, Node, Relationship
 import time
 
 
+
+def convert_time(seconds):
+    seconds = seconds % (24 * 3600)
+    hour = seconds // 3600
+    seconds %= 3600
+    minutes = seconds // 60
+    seconds %= 60
+    return "%d:%02d:%02d" % (hour, minutes, seconds)
+
+
 def check_key(dictionary, key):
     if key in dictionary.keys():
         return dictionary[key]
@@ -23,39 +33,54 @@ def find_tags(*args):
     if args[1].__contains__('Tags'):
         name = find_name_tag(args[1]['Tags'])
         args[0].debug('Tag: ' + name + " found")
+    elif args[1].__contains__('SubnetId'):
+        name = args[1]['SubnetId']
+        args[0].debug('name value configured as SubnetId: ' + name)
+    elif args[1].__contains__('elcId'):
+        name = args[1]['elcId']
+        args[0].debug('name value configured as elcId: ' + name)
     else:
         name = ""
     return name
 
 
 def find_node(*args, **kwargs):
-    return args[0].find_one(**kwargs)
+    start_timer = time.time()
+    node = args[0].find_one(**kwargs)
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
+    return node
 
 
 def create_node(*args, **kvargs):
+    start_timer = time.time()
     tx = args[0].begin()
     graph_node = Node(args[2], **kvargs)
     tx.merge(graph_node)
     tx.commit()
     args[1].debug('Create Graph node: ' + args[2] + " " + str(kvargs))
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
     return graph_node
 
 
 def create_relationship(*args, **kvargs):
+    start_timer = time.time()
     tx = args[0].begin()
     if len(kvargs) > 0:
         args[1].debug('Create Graph Relationship: ' + args[2]['Name'] + " " + args[3] + " " + args[4]['Name'] + " " +
                       str(kvargs))
         relationship = Relationship(args[2], args[3], args[4], **kvargs)
     else:
-        args[1].debug('Create Graph Relationship: ' + args[2]['Name'] + " " + args[3] + " " + args[4]['Name'])
+        name = find_tags(args[1], args[2])
+        args[1].debug('Create Graph Relationship: ' + name + " " + args[3] + " " + args[4]['Name'])
         relationship = Relationship(args[2], args[3], args[4])
     tx.merge(relationship)
     tx.commit()
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
     return relationship
 
 
 def create_subnets(*args):
+    start_timer = time.time()
     subnets_array = []
     subnets = args[4].describe_subnets(Filters=[{'Name': 'vpc-id', 'Values': [args[3]]}])
     if subnets['Subnets']:
@@ -63,29 +88,38 @@ def create_subnets(*args):
             graph_az = create_node(args[0], args[1], "AvailabilityZone", Name=subnet['AvailabilityZone'],
                                    AvailabilityZoneId=subnet['AvailabilityZoneId'])
             name = find_tags(args[1], subnet)
-            graph_subnet = create_node(args[0], args[1], "Subnet", SubnetId=subnet['SubnetId'], Name=name,
-                                       az=subnet['AvailabilityZone'], cidr=subnet['CidrBlock'], VpcId=subnet['VpcId'])
+            graph_subnet = create_node(args[0], args[1], "Subnet",
+                                       SubnetId=subnet['SubnetId'],
+                                       Name=name,
+                                       az=subnet['AvailabilityZone'],
+                                       cidr=subnet['CidrBlock'],
+                                       VpcId=subnet['VpcId'],
+                                       IsDefault=subnet['DefaultForAz'])
             if graph_subnet is not None:
                 create_relationship(args[0], args[1], graph_subnet, "BELONGS", graph_az)
             if graph_az is not None:
                 create_relationship(args[0], args[1], graph_az, "BELONGS", args[2])
             subnets_array.append(graph_subnet)
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
     return subnets_array
 
 
 def create_igws(*args):
+    start_timer = time.time()
     igws_array = []
     igws = args[3].describe_internet_gateways(Filters=[{'Name': 'attachment.vpc-id', 'Values': [args[2]]}])
     if igws['InternetGateways']:
         for igw in igws['InternetGateways']:
             name = find_tags(args[1], igw)
             graph_igw = create_node(args[0], args[1], "IGW", igwId=igw['InternetGatewayId'],
-                                    VpcId=igw['Attachments'][0]['VpcId'], Name=name)
+                                    VpcId=igw['Attachments'][0]['VpcId'], Name=name, IsDefault=args[4])
             igws_array.append(graph_igw)
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
     return igws_array
 
 
 def create_nat_gws(*args):
+    start_timer = time.time()
     ngws_array = []
     ngws = args[3].describe_nat_gateways(Filters=[{'Name': 'vpc-id', 'Values': [args[2]]}])
     if ngws['NatGateways']:
@@ -94,24 +128,29 @@ def create_nat_gws(*args):
             if name_tag == '':
                 name_tag = ngw['NatGatewayId']
             graph_ngw = create_node(args[0], args[1], "NATGW", ngwId=ngw['NatGatewayId'], SubnetId=ngw['SubnetId'],
-                                    Name=name_tag)
+                                    Name=name_tag, IsDefault=args[4])
             ngws_array.append(graph_ngw)
             find_eip = find_node(args[0], args[1], label="EIP", property_key='AllocationId',
                                  property_value=ngw['NatGatewayAddresses'][0]['AllocationId'])
             if find_eip is not None:
                 create_relationship(args[0], args[1], find_eip, "BELONGS", graph_ngw)
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
     return ngws_array
 
 
 def create_vpc(*args):
+    start_timer = time.time()
     vpcs = args[3].describe_vpcs()
     if vpcs['Vpcs']:
         for vpc in vpcs['Vpcs']:
             name = find_tags(args[1], vpc)
-            subnets = create_subnets(args[0], args[1], args[2], vpc['VpcId'], args[3])
-            igws = create_igws(args[0], args[1], vpc['VpcId'], args[3])
-            ngws = create_nat_gws(args[0], args[1],  vpc['VpcId'], args[3])
-            graph_vpc = create_node(args[0], args[1], "VPC", vpcId=vpc['VpcId'], Name=name, cidr=vpc['CidrBlock'])
+            graph_vpc = create_node(args[0], args[1], "VPC", vpcId=vpc['VpcId'], Name=name, cidr=vpc['CidrBlock'],
+                                    IsDefault=vpc['IsDefault'])
+
+            subnets = create_subnets(args[0], args[1], args[2], vpc['VpcId'], args[3], vpc['IsDefault'])
+            igws = create_igws(args[0], args[1], vpc['VpcId'], args[3], vpc['IsDefault'])
+            ngws = create_nat_gws(args[0], args[1],  vpc['VpcId'], args[3], vpc['IsDefault'])
+
             create_relationship(args[0], args[1], graph_vpc, "BELONGS", args[2])
             for subnet in subnets:
                 create_relationship(args[0], args[1], subnet, "BELONGS", graph_vpc)
@@ -122,6 +161,8 @@ def create_vpc(*args):
                                          property_value=ngw['SubnetId'])
                 create_relationship(args[0], args[1], ngw, "BELONGS", graph_subnet)
 
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
+
 
 def find_attachments(volume):
     attachments = []
@@ -131,6 +172,7 @@ def find_attachments(volume):
 
 
 def create_ec2_volumes(*args):
+    start_timer = time.time()
     volumes = args[2].describe_volumes()
     for volume in volumes['Volumes']:
         attachments = find_attachments(volume)
@@ -146,6 +188,7 @@ def create_ec2_volumes(*args):
             create_node(args[0], args[1], "Volumes", Name=name_tag, AvailabilityZone=volume['AvailabilityZone'],
                         Size=volume['Size'], VolumeId=volume['VolumeId'], VolumeType=volume['VolumeType'],
                         Encrypted=volume['Encrypted'])
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def create_reservations(*args):
@@ -156,6 +199,7 @@ def create_reservations(*args):
 
 
 def create_ec2(*args):
+    start_timer = time.time()
     for instance in args[2]['Instances']:
         if not instance['State']['Code'] == 48:
             name = find_tags(args[1], instance)
@@ -176,28 +220,82 @@ def create_ec2(*args):
                                      property_value=instance['InstanceId'])
             if graph_volume is not None:
                 create_relationship(args[0], args[1], graph_ec2, "ATTACHED", graph_volume)
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def create_rds(*args):
+    start_timer = time.time()
     rds = boto3.session.Session(profile_name=args[2]).client('rds', region_name=args[3])
     databases = rds.describe_db_instances()
 
     args[1].info("Found " + str(len(databases['DBInstances'])) + " RDS Instances")
     for db in databases['DBInstances']:
-        create_node(args[0], args[1], "RDS", rdsId=db['DBInstanceIdentifier'], DBInstanceClass=db['DBInstanceClass'],
+        graph_rds = create_node(args[0], args[1], "RDS", rdsId=db['DBInstanceIdentifier'], DBInstanceClass=db['DBInstanceClass'],
                     Engine=db['Engine'], EngineVersion=db['EngineVersion'], MultiAZ=db['MultiAZ'],
                     AllocatedStorage=db['AllocatedStorage'], Name=db['DBInstanceIdentifier'])
+        for subnetId in db['DBSubnetGroup']['Subnets']:
+            graph_subnet = find_node(args[0], args[1], label="Subnet", property_key='SubnetId', property_value=subnetId['SubnetIdentifier'])
+            if graph_subnet is not None:
+                create_relationship(args[0], args[1], graph_rds, "BELONGS", graph_subnet)
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def create_elc(*args):
+    start_timer = time.time()
     elasticache = boto3.session.Session(profile_name=args[2]).client('elasticache', region_name=args[3])
     elcs = elasticache.describe_cache_clusters()['CacheClusters']
     args[1].info("Found " + str(len(elcs)) + " ElastiCache Clusters")
     for elc in elcs:
         create_node(args[0], args[1], "ElastiCache", elcId=elc['CacheClusterId'])
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
+
+
+def create_eks(*args):
+    start_timer = time.time()
+    eks = boto3.session.Session(profile_name=args[2]).client('eks', region_name=args[3])
+    try:
+        list_clusters = eks.list_clusters()
+        args[1].info("Found " + str(len(list_clusters['clusters'])) + " EKS Clusters")
+        for node in list_clusters['clusters']:
+            describe_cluster = eks.describe_cluster(name=node)
+            list_nodegroups = eks.list_nodegroups(clusterName=node)
+            try:
+                list_fargate_profiles = eks.list_fargate_profiles(clusterName=node)
+            except eks.exceptions.ClientError as e:
+                if e.response['Error']['Code'] == 'AccessDeniedException':
+                    args[1].error("eks.list_fargate_profiles: " + e.response['Error']['Message'])
+                else:
+                    args[1].error("Unexpected error: %s" % e)
+            describe_cluster = describe_cluster['cluster']
+            resourcesVpcConfig = describe_cluster['resourcesVpcConfig']
+            graph_eks = create_node(args[0], args[1], "EKS",
+                                    Name=describe_cluster['name'],
+                                    platformVersion=describe_cluster['platformVersion'],
+                                    status=describe_cluster['status'],
+                                    version=describe_cluster['version'],
+                                    subnetIds=resourcesVpcConfig['subnetIds'],
+                                    securityGroupIds=resourcesVpcConfig['securityGroupIds'],
+                                    vpcId=resourcesVpcConfig['vpcId'],
+                                    endpointPublicAccess=resourcesVpcConfig['endpointPublicAccess'],
+                                    endpointPrivateAccess=resourcesVpcConfig['endpointPrivateAccess'],
+                                    )
+            for subnetId in resourcesVpcConfig['subnetIds']:
+                graph_subnet = find_node(args[0], args[1], label="Subnet", property_key='SubnetId',
+                                         property_value=subnetId)
+                if graph_subnet is not None:
+                    create_relationship(args[0], args[1], graph_eks, "BELONGS", graph_subnet)
+
+    except eks.exceptions.ClientError as e:
+        if e.response['Error']['Code'] == 'AccessDeniedException':
+            args[1].error("eks.list_clusters: " + e.args[0])
+        else:
+            args[1].error("Unexpected error: %s" % e)
+
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def create_elb(*args):
+    start_timer = time.time()
     loadbalancer = boto3.session.Session(profile_name=args[2]).client('elb', region_name=args[3])
     elbs = loadbalancer.describe_load_balancers()['LoadBalancerDescriptions']
     args[1].info("Found " + str(len(elbs)) + " ELBs")
@@ -213,9 +311,11 @@ def create_elb(*args):
                                        property_value=instance['InstanceId'])
             if graph_instance is not None:
                 create_relationship(args[0], args[1], graph_instance, "BELONGS", graph_elb)
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def create_eip(*args):
+    start_timer = time.time()
     eips = args[2].describe_addresses()
     args[1].info("Found " + str(len(eips)) + " EIPs")
     for eip in eips['Addresses']:
@@ -224,17 +324,21 @@ def create_eip(*args):
                     Domain=eip['Domain'], PublicIpv4Pool=eip['PublicIpv4Pool'], Name=eip['PublicIp'],
                     AssociationId=check_key(eip, 'AssociationId'), NetworkInterfaceId=network_interface_id
                     )
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def create_network_interfaces(*args):
+    start_timer = time.time()
     interfaces = args[2].describe_network_interfaces()
     args[1].info("Found " + str(len(interfaces['NetworkInterfaces'])) + " Interfaces")
     for interface in interfaces['NetworkInterfaces']:
         create_node(args[0], args[1], "Interfaces", Description=interface['Description'],
                     RequesterId=check_key(interface, 'RequesterId'), NetworkInterfaceId=interface['NetworkInterfaceId'])
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def create_topics(*args):
+    start_timer = time.time()
     topics = args[2].list_topics()
     args[1].info("Found " + str(len(topics['Topics']))  + " Topics")
     for topic in topics['Topics']:
@@ -246,9 +350,11 @@ def create_topics(*args):
                     SubscriptionsPending=topic_attributes['Attributes']['SubscriptionsPending'],
                     SubscriptionsConfirmed=topic_attributes['Attributes']['SubscriptionsConfirmed']
                     )
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def create_sns(*args):
+    start_timer = time.time()
     sns = boto3.session.Session(profile_name=args[2]).client('sns', region_name=args[3])
     create_topics(args[0], args[1], sns)
     subscriptions = sns.list_subscriptions()
@@ -291,9 +397,11 @@ def create_sns(*args):
         else:
             args[1].error("Unexpected error: %s" % e)
     # tags_for_resource = sns.list_tags_for_resource()
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def create_target_groups(*args):
+    start_timer = time.time()
     tgs = args[2].describe_target_groups(LoadBalancerArn=args[3])['TargetGroups']
     args[1].info("Found " + str(len(tgs)) + " TargetGroups")
     for tg in tgs:
@@ -308,9 +416,31 @@ def create_target_groups(*args):
                                        property_value=target['Target']['Id'])
             if graph_instance is not None:
                 create_relationship(args[0], args[1], graph_instance, "ATTACHED", graph_tg)
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
+
+
+def create_asg(*args):
+    start_timer = time.time()
+    autoscaling = boto3.session.Session(profile_name=args[2]).client('autoscaling', region_name=args[3])
+    asgs = autoscaling.describe_auto_scaling_groups()['AutoScalingGroups']
+    args[1].info("Found " + str(len(asgs)) + " ASGs")
+    for asg in asgs:
+        graph_asg = create_node(args[0], args[1], "ASG",
+                                Name=asg['AutoScalingGroupName'],
+                                LaunchConfigurationName=asg['LaunchConfigurationName'],
+                                MinSize=asg['MinSize'],
+                                MaxSize=asg['MaxSize'],
+                                DesiredCapacity=asg['DesiredCapacity'])
+
+        graph_subnet = find_node(args[0], args[1], label="Subnet", property_key='SubnetId',
+                                 property_value=asg['VPCZoneIdentifier'])
+        if graph_subnet is not None:
+            create_relationship(args[0], args[1], graph_asg, "ATTACHED", graph_subnet)
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def create_alb(*args):
+    start_timer = time.time()
     elbv2 = boto3.session.Session(profile_name=args[2]).client('elbv2', region_name=args[3])
     albs = elbv2.describe_load_balancers()['LoadBalancers']
     args[1].info("Found " + str(len(albs)) + " ALBs")
@@ -325,9 +455,11 @@ def create_alb(*args):
             if graph_subnet is not None:
                 create_relationship(args[0], args[1], graph_alb, "ATTACHED", graph_subnet)
         create_target_groups(args[0], args[1], elbv2, alb_arn, graph_alb)
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def create_lambda(*args):
+    start_timer = time.time()
     lambdaFunctions = boto3.session.Session(profile_name=args[2]).client('lambda', region_name=args[3])
     lambdas = lambdaFunctions.list_functions()['Functions']
     args[1].info("Found " + str(len(lambdas)) + " Lambdas")
@@ -335,9 +467,11 @@ def create_lambda(*args):
         create_node(args[0], args[1], "Lambda", Name=l['FunctionName'])
     global has_lambda
     has_lambda = False
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def create_sg(*args):
+    start_timer = time.time()
     security_groups = args[2].describe_security_groups()
     args[1].info("Found " + str(len(security_groups['SecurityGroups'])) + " SecurityGroups")
     for sg in security_groups['SecurityGroups']:
@@ -346,9 +480,11 @@ def create_sg(*args):
         graph_vpc = find_node(args[0], args[1], label="Subnet", property_key='VpcId', property_value=sg['VpcId'])
         if graph_vpc is not None:
             create_relationship(args[0], args[1], graph_sg, "BELONGS", graph_vpc)
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def create_dynamodb(*args):
+    start_timer = time.time()
     dynamodb = boto3.session.Session(profile_name=args[2]).client('dynamodb', region_name=args[3])
     dynamo_tables = dynamodb.list_tables()['TableNames']
     args[1].info("Found " + str(len(dynamo_tables)) + " DynamoDB Tables")
@@ -357,9 +493,11 @@ def create_dynamodb(*args):
         create_node(args[0], args[1], "DynamoDB", Name=table_name,
                     write_capacity=table_info['ProvisionedThroughput']['WriteCapacityUnits'],
                     read_capacity=table_info['ProvisionedThroughput']['ReadCapacityUnits'])
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def create_instance_relationships(*args):
+    start_timer = time.time()
     args[1].info("Creating security-group - user-group relationships")
     instances = args[2].describe_instances(Filters=[{'Name': 'instance.group-id', 'Values': [args[4]['GroupId']]}])
     if instances['Reservations']:
@@ -369,9 +507,11 @@ def create_instance_relationships(*args):
             if graph_ec2 is not None:
                 args[1].info("Creating EC2 Instance Relationship for: " + graph_ec2['Name'])
                 create_relationship(args[0], args[1], graph_ec2, "ATTACHED", args[3])
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def create_database_sg_relationships(*args):
+    start_timer = time.time()
     args[1].info("Creating security-group - database relationships")
     rds = boto3.session.Session(profile_name=args[2]).client('rds', region_name=args[3])
     databases = rds.describe_db_instances()['DBInstances']
@@ -383,19 +523,22 @@ def create_database_sg_relationships(*args):
                                       property_value=db['DBInstanceIdentifier'])
                 if graph_rds is not None:
                     create_relationship(args[0], args[1], graph_rds, "ATTACHED", args[4])
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def create_database_subnet_relationships(*args):
-
+    start_timer = time.time()
     databases = args[2].describe_db_instances()['DBInstances']
     for db_subnets in databases['DBSubnetGroup']['Subnets']:
         graph_rds = find_node(args[0], args[1], label="Subnets", property_key='SubnetId',
                               property_value=args[4]['SubnetIdentifier'])
         if graph_rds is not None:
             create_relationship(args[0], args[1], graph_rds, "ATTACHED", args[3])
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def create_elasticache_relationships(*args):
+    start_timer = time.time()
     args[1].info("Creating security-group - elasticache relationships")
     elasticache = boto3.session.Session(profile_name=args[2]).client('elasticache', region_name=args[3])
     elcs = elasticache.describe_cache_clusters()['CacheClusters']
@@ -407,9 +550,11 @@ def create_elasticache_relationships(*args):
                                       property_value=elc['CacheClusterId'])
                 if graph_elc is not None:
                     create_relationship(args[0], args[1], graph_elc, "ATTACHED", args[4])
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def create_elb_relationships(*args):
+    start_timer = time.time()
     args[1].info("Creating security-group - elb relationships")
     loadbalancer = boto3.Session(profile_name=args[2]).client('elb', region_name=args[3])
     elbs = loadbalancer.describe_load_balancers()['LoadBalancerDescriptions']
@@ -421,9 +566,11 @@ def create_elb_relationships(*args):
                                       property_value=elb['LoadBalancerName'])
                 if graph_elb is not None:
                     create_relationship(args[0], args[1], graph_elb, "ATTACHED", args[3])
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def create_lamda_relationships(*args):
+    start_timer = time.time()
     args[1].info("Creating security-group - lambda relationships")
     lambda_functions = boto3.session.Session(profile_name=args[2]).client('lambda', region_name=args[3])
     lambdas = lambda_functions.list_functions()['Functions']
@@ -434,9 +581,11 @@ def create_lamda_relationships(*args):
                     graph_lambda = find_node(args[0], args[1], label="Lambda", property_key='name',
                                              property_value=l['FunctionName'])
                     create_relationship(args[0], args[1], graph_lambda, "ATTACHED", args[3])
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def create_useridgrouppairs_relationships(*args):
+    start_timer = time.time()
     args[1].info("Creating security-group - user-group relationships")
     for group in args[2]['UserIdGroupPairs']:
         graph_from_sg = find_node(args[0], args[1], label="SecurityGroup", property_key='securityGroupId',
@@ -453,9 +602,11 @@ def create_useridgrouppairs_relationships(*args):
                     port_range = "%d - %d" % (args[2]['FromPort'], args[2]['ToPort'])
             create_relationship(args[0], args[1], graph_from_sg, "ATTACHED", args[3], protocol=protocol,
                                 port=port_range)
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def create_ipranges_relationships(*args):
+    start_timer = time.time()
     args[1].info("Creating security-group - ip range relationships")
     for cidr in args[2]['IpRanges']:
         try:
@@ -473,9 +624,11 @@ def create_ipranges_relationships(*args):
                 port_range = "%d - %d" % (args[2]['FromPort'], args[2]['ToPort'])
         if graph_cidr is not None:
             create_relationship(args[0], args[1], graph_cidr, "ATTACHED", args[3], protocol=protocol, port=port_range)
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def create_sg_relationships(*args):
+    start_timer = time.time()
     security_groups = args[4].describe_security_groups()
     args[1].info("Creating security-group relationships")
     for sg in security_groups['SecurityGroups']:
@@ -495,18 +648,23 @@ def create_sg_relationships(*args):
         create_elb_relationships(args[0], args[1], args[2], args[3], graph_sg, sg)
         if args[5]:
             create_lamda_relationships(args[0], args[1], args[2], args[3], graph_sg, sg)
+    args[1].debug("Module Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 def initialise_logger():
+    start_timer = time.time()
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO)
     # create a file & console handlers
     ch = logging.StreamHandler()
+    fh = logging.FileHandler('./info.log')
     # create a logging format
     formatter = logging.Formatter('%(asctime)s - %(funcName)s - %(levelname)s - %(message)s')
     ch.setFormatter(formatter)
+    fh.setFormatter(formatter)
     # add the handlers to the logger
     logger.addHandler(ch)
+    logger.addHandler(fh)
     logger.info("********************************")
     logger.info("Initialising AWS Topology Mapper")
     logger.info("********************************")
@@ -514,6 +672,7 @@ def initialise_logger():
 
 
 def main():
+    start_timer = time.time()
     logger_dict = initialise_logger()
     logger = logger_dict['log_handle']
     ch = logger_dict['console_handle']
@@ -522,6 +681,7 @@ def main():
     graph.delete_all()
     has_lambda = True
     aws_profiles = ["easyjet-prod", "easyjet-nonprod"]
+    aws_profiles = ["blue-badge"]
 
     for profile in aws_profiles:
         logger_dict['log_handle'].info("Specifying aws profile: " + profile)
@@ -535,8 +695,11 @@ def main():
         logger_dict['log_handle'].info("Define AWS Provider as account: " + caller_identify['Account'])
         graph_provider = create_node(graph, logger, "Provider", Name='AWS', Account=caller_identify['Account'])
 
-        regions = ["eu-central-1", "eu-west-1", "eu-west-2", "eu-west-3", "eu-north-1"]
-        for region in regions:
+        ec2 = boto3.session.Session(profile_name=profile).client('ec2')
+        describe_regions = ec2.describe_regions()
+
+        for describe_region in describe_regions['Regions']:
+            region = describe_region['RegionName']
             logger.info("Querying region: " + region)
             formatter = logging.Formatter(
                 '%(asctime)s - %(funcName)s - %(levelname)s - ' + profile + '_' + region + ' - %(message)s')
@@ -553,22 +716,20 @@ def main():
             create_sg(graph, logger, ec2)
             create_ec2_volumes(graph, logger, ec2)
             create_reservations(graph, logger, ec2)
-
-            # create_network_interfaces(graph, logger)
             create_sns(graph, logger, profile, region)
-            # create_sqs(graph, logger)
+            create_eks(graph, logger, profile, region)
             create_rds(graph, logger, profile, region)
             create_elb(graph, logger, profile, region)
+            create_asg(graph, logger, profile, region)
             create_alb(graph, logger, profile, region)
             create_elc(graph, logger, profile, region)
             if has_lambda:
                 create_lambda(graph, logger, profile, region)
                 create_dynamodb(graph, logger, profile, region)
             create_sg_relationships(graph, logger, profile, region, ec2, has_lambda)
-    logger.info("Audit Completed in " + time.time() - start_time + "seconds")
+    logger.info("Audit Completed in " + str(convert_time(time.time() - start_timer)) + " seconds")
 
 
 if __name__ == '__main__':
     start_time = time.time()
     main()
-

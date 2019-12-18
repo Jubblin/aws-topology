@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en" xml:lang="en">
     <head>
-        <title>Neovis.js AWS Topology Example</title>
+        <title>Neovis.js AWS Topology</title>
         <style type="text/css">
             html, body {
                 font: 16pt arial;
@@ -10,7 +10,7 @@
             #viz {
                 /*width: 1400px;*/
                 height: 900px;
-                border: 1px solid lightgray;
+                border: 2px solid lightgray;
                 font: 24pt "Roboto Light";
             }
         </style>
@@ -31,40 +31,44 @@
                 labels: {
                     "EC2": {
                         "thickness": "weight",
-                        "caption": "name"
+                        "caption": "Name"
                     },
                     "VPC": {
                         "thickness": "weight",
-                        "caption": "name"
+                        "caption": "Name"
                     },
                     "IP": {
                         "thickness": "weight",
-                        "caption": "name"
+                        "caption": "Name"
                     },
                     "Region": {
                         "thickness": "weight",
-                        "caption": "name"
+                        "caption": "Name"
                     },
                     "RDS": {
                         "thickness": "weight",
-                        "caption": "name"
+                        "caption": "Name"
                     },
                     "Subnet": {
                         "thickness": "weight",
-                        "caption": "cidr"
+                        "caption": "Name"
                     },
                     "IGW": {
                         "thickness": "weight",
-                        "caption": "name"
+                        "caption": "Name"
                     },
                     "Provider": {
                         "thickness": "weight",
-                        "caption": "name",
+                        "caption": "Name",
                         "size": "80"
                     }
 
                 },
                 relationships: {
+                    "ATTACHED": {
+                        "thickness": "weight",
+                        "caption": true
+                    },
                     "BELONGS": {
                         "thickness": "weight",
                         "caption": true
@@ -78,7 +82,7 @@
                 arrows: true,
                 hierarchical_layout: true,
                 hierarchical_sort_method: "directed",
-                initial_cypher: "MATCH (n) WHERE n:Provider OR n:EC2 OR n:VPC OR n:IP OR n:Region OR n:RDS OR n:Subnet OR n:IGW OR n:AZ MATCH (n)-[r]-() RETURN n,r"
+                initial_cypher: "MATCH (n) WHERE n:Provider OR n:EC2 OR n.IsDefault = False OR n:IP OR n:Region OR n:RDS OR n:AZ MATCH (n)-[r]-() RETURN n,r"
             };
             viz = new NeoVis.default(config);
             viz.render();
