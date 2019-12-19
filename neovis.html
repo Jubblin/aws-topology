@@ -9,7 +9,7 @@
 
             #viz {
                 /*width: 1400px;*/
-                height: 900px;
+                height: 2000px;
                 border: 2px solid lightgray;
                 font: 24pt "Roboto Light";
             }
@@ -37,6 +37,10 @@
                         "thickness": "weight",
                         "caption": "Name"
                     },
+                    "EIP": {
+                        "thickness": "weight",
+                        "caption": "Name"
+                    },
                     "IP": {
                         "thickness": "weight",
                         "caption": "Name"
@@ -53,7 +57,31 @@
                         "thickness": "weight",
                         "caption": "Name"
                     },
+                    "ALB": {
+                        "thickness": "weight",
+                        "caption": "Name"
+                    },
+                    "NATGW": {
+                        "thickness": "weight",
+                        "caption": "Name"
+                    },
+                    "ASG": {
+                        "thickness": "weight",
+                        "caption": "Name"
+                    },
                     "IGW": {
+                        "thickness": "weight",
+                        "caption": "Name"
+                    },
+                    "Volumes": {
+                        "thickness": "weight",
+                        "caption": "Name"
+                    },
+                    "Lambda": {
+                        "thickness": "weight",
+                        "caption": "Name"
+                    },
+                    "EKS": {
                         "thickness": "weight",
                         "caption": "Name"
                     },
@@ -62,7 +90,6 @@
                         "caption": "Name",
                         "size": "80"
                     }
-
                 },
                 relationships: {
                     "ATTACHED": {
@@ -82,7 +109,7 @@
                 arrows: true,
                 hierarchical_layout: true,
                 hierarchical_sort_method: "directed",
-                initial_cypher: "MATCH (n) WHERE n:Provider OR n:EC2 OR n.IsDefault = False OR n:IP OR n:Region OR n:RDS OR n:AZ MATCH (n)-[r]-() RETURN n,r"
+                initial_cypher: "MATCH (n) WHERE n:Provider OR n:EKS OR n:ALB OR n:ASG OR n:Lambda OR n:Volumes OR n:EC2 OR n.IsDefault = False OR n:EIP OR n:IP OR n:Region OR n:RDS OR n:AZ MATCH (n)-[r]-() RETURN n,r"
             };
             viz = new NeoVis.default(config);
             viz.render();
