@@ -23,7 +23,7 @@ def check_key(dictionary, key):
 
 
 def found_them(*args):
-    args[0].info(args[1] + args[2] + args[3])
+    args[0].info("Found " + args[1] + args[2])
 
 
 def find_name_tag(tags):
@@ -232,7 +232,7 @@ def create_rds(*args):
     rds = boto3.session.Session(profile_name=args[2]).client('rds', region_name=args[3])
     databases = rds.describe_db_instances()
 
-    found_them(args[1], "Found ", str(len(databases['DBInstances'])), " RDS Instances")
+    found_them(args[1], str(len(databases['DBInstances'])), " RDS Instances")
     for db in databases['DBInstances']:
         graph_rds = create_node(args[0], args[1], "RDS", rdsId=db['DBInstanceIdentifier'], DBInstanceClass=db['DBInstanceClass'],
                     Engine=db['Engine'], EngineVersion=db['EngineVersion'], MultiAZ=db['MultiAZ'],
@@ -248,7 +248,7 @@ def create_elc(*args):
     start_timer = time.time()
     elasticache = boto3.session.Session(profile_name=args[2]).client('elasticache', region_name=args[3])
     elcs = elasticache.describe_cache_clusters()['CacheClusters']
-    found_them(args[1], "Found ", str(len(elcs)), " ElastiCache Instances")
+    found_them(args[1], str(len(elcs)), " ElastiCache Instances")
     for elc in elcs:
         create_node(args[0], args[1], "ElastiCache", elcId=elc['CacheClusterId'])
     args[1].debug(timer['prefix'] + str(convert_time(time.time() - start_timer)) + timer['suffix'])
@@ -259,7 +259,7 @@ def create_eks(*args):
     eks = boto3.session.Session(profile_name=args[2]).client('eks', region_name=args[3])
     try:
         list_clusters = eks.list_clusters()
-        found_them(args[1], "Found ", str(len(list_clusters['clusters'])), " EKS Instances")
+        found_them(args[1], str(len(list_clusters['clusters'])), " EKS Instances")
         for node in list_clusters['clusters']:
             describe_cluster = eks.describe_cluster(name=node)
             list_nodegroups = eks.list_nodegroups(clusterName=node)
@@ -302,7 +302,7 @@ def create_elb(*args):
     start_timer = time.time()
     loadbalancer = boto3.session.Session(profile_name=args[2]).client('elb', region_name=args[3])
     elbs = loadbalancer.describe_load_balancers()['LoadBalancerDescriptions']
-    found_them(args[1], "Found ", str(len(elbs)), " ELBs")
+    found_them(args[1], str(len(elbs)), " ELBs")
     for elb in elbs:
         graph_elb = create_node(args[0], args[1], "ELB", Name=elb['LoadBalancerName'],
                                 CanonicalHostedZoneName=elb['CanonicalHostedZoneName'])
@@ -321,7 +321,7 @@ def create_elb(*args):
 def create_eip(*args):
     start_timer = time.time()
     eips = args[2].describe_addresses()
-    found_them(args[1], "Found ", str(len(eips)), " EIPs")
+    found_them(args[1], str(len(eips)), " EIPs")
     for eip in eips['Addresses']:
         network_interface_id = check_key(eip, 'NetworkInterfaceId')
         create_node(args[0], args[1], "EIP", AllocationId=eip['AllocationId'], PublicIp=eip['PublicIp'],
@@ -335,7 +335,7 @@ def create_network_interfaces(*args):
     start_timer = time.time()
     interfaces = args[2].describe_network_interfaces()
 
-    found_them(args[1], "Found ", str(len(interfaces['NetworkInterfaces'])), " Interfaces")
+    found_them(args[1], str(len(interfaces['NetworkInterfaces'])), " Interfaces")
     for interface in interfaces['NetworkInterfaces']:
         create_node(args[0], args[1], "Interfaces", Description=interface['Description'],
                     RequesterId=check_key(interface, 'RequesterId'), NetworkInterfaceId=interface['NetworkInterfaceId'])
@@ -345,7 +345,7 @@ def create_network_interfaces(*args):
 def create_topics(*args):
     start_timer = time.time()
     topics = args[2].list_topics()
-    found_them(args[1], "Found ", str(len(topics['Topics'])), " Topics")
+    found_them(args[1], str(len(topics['Topics'])), " Topics")
     for topic in topics['Topics']:
         topic_attributes = args[2].get_topic_attributes(TopicArn=topic['TopicArn'])
         create_node(args[0], args[1], "Topic", Name=topic_attributes['Attributes']['DisplayName'],
@@ -364,7 +364,7 @@ def create_sns(*args):
     create_topics(args[0], args[1], sns)
     subscriptions = sns.list_subscriptions()
 
-    found_them(args[1], "Found ", str(len(subscriptions['Subscriptions'])), " Subscriptions")
+    found_them(args[1], str(len(subscriptions['Subscriptions'])), " Subscriptions")
     for subscription in subscriptions['Subscriptions']:
         graph_subscription = create_node(args[0], args[1], "SNS_Subscriptions",
                                          Name=subscription['SubscriptionArn'],
@@ -381,7 +381,7 @@ def create_sns(*args):
 
     try:
         platform_applications = sns.list_platform_applications()
-        found_them(args[1], "Found ", str(len(platform_applications['PlatformApplications'])), " PlatformApplications")
+        found_them(args[1], str(len(platform_applications['PlatformApplications'])), " PlatformApplications")
         for application in platform_applications['PlatformApplications']:
             create_node(args[0], args[1], "PlatformApplications",
                         PlatformApplicationArn=application['PlatformApplicationArn'],
@@ -409,14 +409,14 @@ def create_sns(*args):
 def create_target_groups(*args):
     start_timer = time.time()
     tgs = args[2].describe_target_groups(LoadBalancerArn=args[3])['TargetGroups']
-    found_them(args[1], "Found ", str(len(tgs)), " TargetGroups")
+    found_them(args[1], str(len(tgs)), " TargetGroups")
     for tg in tgs:
         tg_arn = tg['TargetGroupArn']
         targets = args[2].describe_target_health(TargetGroupArn=tg_arn)['TargetHealthDescriptions']
         graph_tg = create_node(args[0], args[1], "Target Group", Name=tg['TargetGroupName'])
         create_relationship(args[0], args[1], graph_tg, "ATTACHED", args[4])
 
-        found_them(args[1], "Found ", str(len(targets)), " Targets")
+        found_them(args[1], str(len(targets)), " Targets")
         for target in targets:
             graph_instance = find_node(args[0], args[1], label="EC2", property_key='instanceId',
                                        property_value=target['Target']['Id'])
@@ -429,7 +429,7 @@ def create_asg(*args):
     start_timer = time.time()
     autoscaling = boto3.session.Session(profile_name=args[2]).client('autoscaling', region_name=args[3])
     asgs = autoscaling.describe_auto_scaling_groups()['AutoScalingGroups']
-    found_them(args[1], "Found ", str(len(asgs)), " ASGs")
+    found_them(args[1], str(len(asgs)), " ASGs")
     for asg in asgs:
         graph_asg = create_node(args[0], args[1], "ASG",
                                 Name=asg['AutoScalingGroupName'],
@@ -449,7 +449,7 @@ def create_alb(*args):
     start_timer = time.time()
     elbv2 = boto3.session.Session(profile_name=args[2]).client('elbv2', region_name=args[3])
     albs = elbv2.describe_load_balancers()['LoadBalancers']
-    found_them(args[1], "Found ", str(len(albs)), " ALBs")
+    found_them(args[1], str(len(albs)), " ALBs")
     for alb in albs:
         graph_alb = create_node(args[0], args[1], "ALB", Name=alb['LoadBalancerName'], dnsname=alb['DNSName'],
                                 scheme=alb['Scheme'], VpcId=alb['VpcId'])
@@ -468,7 +468,7 @@ def create_lambda(*args):
     start_timer = time.time()
     lambda_functions = boto3.session.Session(profile_name=args[2]).client('lambda', region_name=args[3])
     lambdas = lambda_functions.list_functions()['Functions']
-    found_them(args[1], "Found ", str(len(lambdas)), " Lambdas")
+    found_them(args[1], str(len(lambdas)), " Lambdas")
     for l in lambdas:
         create_node(args[0], args[1], "Lambda", Name=l['FunctionName'])
     global has_lambda
@@ -479,7 +479,7 @@ def create_lambda(*args):
 def create_sg(*args):
     start_timer = time.time()
     security_groups = args[2].describe_security_groups()
-    found_them(args[1], "Found ", str(len(security_groups['SecurityGroups'])), " SecurityGroups")
+    found_them(args[1], str(len(security_groups['SecurityGroups'])), " SecurityGroups")
     for sg in security_groups['SecurityGroups']:
         graph_sg = create_node(args[0], args[1], "SecurityGroup", securityGroupId=sg['GroupId'], Name=sg['GroupName'],
                                VpcId=sg['VpcId'])
@@ -493,7 +493,7 @@ def create_dynamodb(*args):
     start_timer = time.time()
     dynamodb = boto3.session.Session(profile_name=args[2]).client('dynamodb', region_name=args[3])
     dynamo_tables = dynamodb.list_tables()['TableNames']
-    found_them(args[1], "Found ", str(len(dynamo_tables)), " DynamoDB Tables")
+    found_them(args[1], str(len(dynamo_tables)), " DynamoDB Tables")
     for table_name in dynamo_tables:
         table_info = dynamodb.describe_table(TableName=table_name)['Table']
         create_node(args[0], args[1], "DynamoDB", Name=table_name,
