@@ -1,5 +1,15 @@
 # Customer's Graph Topology
 
+[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=Jubblin_aws-topology&metric=reliability_rating)](https://sonarcloud.io/dashboard?id=Jubblin_aws-topology)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Jubblin_aws-topology&metric=security_rating)](https://sonarcloud.io/dashboard?id=Jubblin_aws-topology)
+[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=Jubblin_aws-topology&metric=bugs)](https://sonarcloud.io/dashboard?id=Jubblin_aws-topology)
+[![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=Jubblin_aws-topology&metric=code_smells)](https://sonarcloud.io/dashboard?id=Jubblin_aws-topology)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=Jubblin_aws-topology&metric=sqale_rating)](https://sonarcloud.io/dashboard?id=Jubblin_aws-topology)
+[![Duplicated Lines (%)](https://sonarcloud.io/api/project_badges/measure?project=Jubblin_aws-topology&metric=duplicated_lines_density)](https://sonarcloud.io/dashboard?id=Jubblin_aws-topology)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Jubblin_aws-topology&metric=security_rating)](https://sonarcloud.io/dashboard?id=Jubblin_aws-topology)
+[![Technical Debt](https://sonarcloud.io/api/project_badges/measure?project=Jubblin_aws-topology&metric=sqale_index)](https://sonarcloud.io/dashboard?id=Jubblin_aws-topology)
+[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=Jubblin_aws-topology&metric=vulnerabilities)](https://sonarcloud.io/dashboard?id=Jubblin_aws-topology)
+
 ## Under the Hood
 ### Neo4j
 Graph database, used for visualize and query customer graph
